@@ -2,19 +2,19 @@
 
 _Authors and experimenters: Ziwen Huang, Paul Heidler, Nicholas Bornman_
 
-*Important note: the code in this folder is the code that was used for performing two-qubit randomized benchmarking with cross-resonance*
-*gates for a pair of coupled transmon qubits.*
+*Important note: the code in this folder was used to perform two-qubit randomized benchmarking with cross-resonance*
+*gates for a pair of fixed-frequency coupled transmon qubits. This codebase would need to be tailored for the user's*
+*particular setup*
 
-The file for direct use is [run_two_qubit_rb_CR_CNOT.py](run_two_qubit_rb_CR_CNOT.py), which relies on random Cliffords generation 
-coded in [TwoQ_RB_Sequence_Generation_CNOT_CR.py](TwoQ_RB_Sequence_Generation_CNOT_CR.py).
+The main entrypoint file is [run_two_qubit_rb_CR_CNOT.py](run_two_qubit_rb_CR_CNOT.py), which in turn relies on random Clifford operations that are generated in [TwoQ_RB_Sequence_Generation_CNOT_CR.py](TwoQ_RB_Sequence_Generation_CNOT_CR.py).
 
 ## 1. Pre-requisite calibrations and some notes
 
 * Calibrate readout pulses and optimize state discrimination.
-* Calibrate and optimize qubit XY pulses. Single qubit operations are based on x90, -x90, x180, y90, -y90, and y180.
-* Our two qubit RB is based on CNOT as the entangling operation which is implemented by direct CR gate. Replace the pertinent lines in the definition of the function `play_sequence` in [run_two_qubit_rb_CR_CNOT.py](run_two_qubit_rb_CR_CNOT.py) (switch case 49) if echoed CR is to be used.
-* No baking will be directly called by the user. The user can easily customize their gates, especially the two-qubit gate pulses.
-* Running gate sequences other than those for RB is also allowed if one manually set the `sequence_list`. (See ##### TEST EXAMPLE in [run_two_qubit_rb_CR_CNOT.py](run_two_qubit_rb_CR_CNOT.py).)
+* Calibrate and optimize qubit XY pulses. Single qubit operations are based on 'x90', '-x90', 'x180', 'y90', '-y90', and 'y180' (virtual Z rotation were only employed in the two-qubit gate; single qubit Z rotations were decomposed in terms of X's and Y's).
+* The two-qubit randomized benchmarking (RB) is based on a CNOT as the entangling operation, implemented by a direct cross-resonance (CR) gate. Any end user should replace the pertinent lines in the definition of the python `play_sequence` function, in [run_two_qubit_rb_CR_CNOT.py](run_two_qubit_rb_CR_CNOT.py) (precisely switch case 49), if an echoed CR gate, or another entangling operation, is to be used.
+* The baking functionality available on the Quantum Machines hardware is not employed here. We believe that this allows an end user to more easily customize their gates, especially the two-qubit gate pulses.
+* Running gate sequences other than those for RB is also possible if one manually sets the `sequence_list` variable (see ##### TEST EXAMPLE in [run_two_qubit_rb_CR_CNOT.py](run_two_qubit_rb_CR_CNOT.py)).
 
 
 
@@ -25,67 +25,61 @@ coded in [TwoQ_RB_Sequence_Generation_CNOT_CR.py](TwoQ_RB_Sequence_Generation_CN
 The configuration consists of 4 elements:
 * `rr1` and `rr2` send readout pulses and measure the transmitted signal for each qubit
 * `q1_xy` and `q2_xy` send drive XY pulses to each qubit
-* `cr_drive_c1t2`, `cr_drive_c2t1` send cross-resonance drive to the control qubit (at target frequency)
-* `cr_cancel_c1t2`, and `cr_cancel_c2t1` send cancellation drive the target qubit (also at target frequency)
+* `cr_drive_c1t2` and `cr_drive_c2t1` send cross-resonance drives to the control qubit (at the target frequency)
+* `cr_cancel_c1t2` and `cr_cancel_c2t1` send cancellation drives the target qubit (also at the target frequency)
 
 ### 2.2 The operations, pulse and waveforms
 
 The readout resonators `rr1` and `rr2` each have a 'readout' operation, each of which is a constant pulse with calibrated readout lengths and amplitudes.
 
-The qubit elements `q1_xy` and `q2_xy` have several operations defined that correspond to X/2, Y/2, -X/2, -Y/2, X and Y gates. The envelopes are Gaussian (although this can be changed by the user), with optional Gaussian DRAG corrections, parameters (amplitudes, lengths, Gaussian sigmas, etc.), that need to be calibrated.
+The qubit elements `q1_xy` and `q2_xy` have several operations defined that correspond to 'X/2', 'Y/2', '-X/2', '-Y/2', 'X' and 'Y' gates. The envelopes are Gaussian (although this can be changed by the user), with optional Gaussian DRAG corrections and parameters (amplitudes, lengths, Gaussian sigmas, etc.), that need to be calibrated.
 
-The qubit element `cr_drive_c1t2` and `cr_drive_c2t1` have square pulse and blackman function options for the CR envelopes. 
+The qubit element `cr_drive_c1t2` and `cr_drive_c2t1` have both a square pulse waveform and a blackman function waveform options for the CR envelopes. The same holds true for `cr_cancel_c1t2` and `cr_cancel_c2t1`. 
 
-Same with `cr_cancel_c1t2` and `cr_cancel_c2t1`. 
+## 3. RB code details
 
-## 3. How this RB code works
+### 3.1 Generate RB and IRB sequences with `generate_sequence_list`
+Below, we explain how the generate sequence function, defined in [run_two_qubit_rb_CR_CNOT.py](run_two_qubit_rb_CR_CNOT.py), works step by step.
 
-### 3.1 Generate RB and IRB sequences by `generate_sequence_list`
-Below, we explain how this function, defined in [run_two_qubit_rb_CR_CNOT.py](run_two_qubit_rb_CR_CNOT.py), works step by step.
+#### 3.1.1 For a given depth integer variable, `generate_sequence_list(depth)` first generates a sequence of random integers, sampled uniformly, from the range 0-11519, with length `depth`. Each of these integers represents an element from the two-qubit Clifford group (which consists of 11520 elements).
 
-#### 3.1.1 For a given `depth`, `generate_sequence_list(depth)` first generates a sequence of random integers from 0-11519 with length `depth`. Each integer represents an element from the two-qubit Clifford group.
+**Example**: for `depth=2`, an example random sequence could be `sequence_ints = [40, 599]`, corresponding to the 40th Clifford group element, followed by the 599th.
 
-**Example**: for `depth=2`, we (presumably) get a random sequence `sequence_ints = [40, 599]`.
-
-the 40th Clifford is 
+The 40th Clifford element is :
 
     0: ─── X180 ────
 
     1: ─── Z90  ────
 
-But in terms of our XY pulses, it is
+However, in terms of our XY pulses, the employed pulse sequence is:
 
     0: ─── X180 ──────────────────────
 
     1: ─── -X90 ──── Y90 ──── X90 ────
 
-the 599th Clifford is
+Next, the 599th Clifford is:
 
     0: ─── I ────── C-CNOT ─── Y90 ──── X90 ───
               
     1: ─── Y180 ─── T-CNOT ─── -X90 ─── -Y90 ──
 
-#### 3.1.2 Next step is to find the inverse gate to make the final unitary identity.
+#### 3.1.2 The next step is to find the inverse gate/Clifford group element of the entire sequence, which is played at the end of the random sequence, to ensure that the final unitary, in the ideal case, is the identity.
 
 **Example**: Using `cirq`, we append `circuit_list[40]` and `circuit_list[599]` to `circuit = cirq.Circuit()`.
 
-Then we can evaluate the unitary of `circuit` by `cirq.unitary(circuit)`. Then we search through `unitary_list` to find the inverse matrix of `cirq.unitary(circuit)`.
+Then we can evaluate the unitary of `circuit` using `cirq.unitary(circuit)`. Then we search through `unitary_list` to find the inverse matrix/Clifford operation, of `cirq.unitary(circuit)`.
 
-Append this inverse to `sequence_ints`, which now is `[40, 599, 1567]`.
+In our example, integer 1567 corresponds to the inverse of Clifford operation 40 followed by operation 599. This inverse is appended to `sequence_ints`, which now is `[40, 599, 1567]` (note that the `circuit_list` and `unitary_list` variables are computed by loading [2q_Clifford_gen_CNOT_circuit.pkl](2q_Clifford_gen_CNOT_circuit.pkl) and [2q_Clifford_gen_CNOT_unitary.pkl](2q_Clifford_gen_CNOT_unitary.pkl); they contain the information on the 11520 element Clifford group and its gates).
 
-You get `circuit_list` and `unitary_list` by loading [2q_Clifford_gen_CNOT_circuit.pkl](2q_Clifford_gen_CNOT_circuit.pkl) and [2q_Clifford_gen_CNOT_unitary.pkl](2q_Clifford_gen_CNOT_unitary.pkl). They contain the information of the 11520 Clifford gates.
+#### 3.1.3: With one random RB sequence computed at the abstract `integer' level, the next step is to translate this information into pulses compiled in [configuration.py](configuration.py).
 
-#### 3.1.3: Now we found one random RB sequence at the abstract level, the next step is to translate it into pulses compiled in [configuration.py](configuration.py).
-
-We first use cirq to construct the full circuit, which is 
-
-**Example**:
+Cirq is used to construct the full circuit, which in our example, is:
 
     0: ───X180──────────────────── I ────── C-CNOT ─── Y90 ──── X90 ─────Y90─── C-CNOT ─── I ─────────────
                                                                                                      
     1: ───-X90 ──── Y90 ──── X90───Y180 ─── T-CNOT ─── -X90 ─── -Y90 ────────── T-CNOT ─── Y90 ─── X90 ───
 
-Then, we can read every `moment` of this circuit, and see what happen to both qubits at each `moment`. The first moment is to play `X180` on qubit 0 and `-X90` on qubit 1. In the string format, this is `[('x180', '0'), ('-x90', '1')]`. The full circuit corresponds to
+This circuit, which comprises a sequence of irreducible pulse operations, is then read in order, and every irreducible operation (every `moment` of this circuit), is analyzed to see what happens to the qubits at each `moment`. For example, the first moment plays `X180` on qubit 0 and `-X90` on qubit 1, which can be summarized in a list of python tuples, as `[('x180', '0'), ('-x90', '1')]`. In this format, the full sequence of circuit instructions corresponds to
 
 `instruct = [('x180', '0'),
 ('-x90', '1'),
@@ -110,29 +104,26 @@ Then, we can read every `moment` of this circuit, and see what happen to both qu
 ('I', '0'),
 ('x90', '1')]`
 
-The above tranform is assisted by [2q_Clifford_gen_CNOT_instruct.pkl](2q_Clifford_gen_CNOT_instruct.pkl) where the string-formatted instruction for each Clifford is stored.
+The above tranformation is assisted by using [2q_Clifford_gen_CNOT_instruct.pkl](2q_Clifford_gen_CNOT_instruct.pkl), whereby the string-formatted instruction for each Clifford is stored.
 
-This is still too complicated for the qm program. We'd better only pass as simple as integers to the program. 
-
-For this purpose, we write the function `instruct_to_integer(instruct)` to finally translate this list of strings as a list of integers -- each describes a concrete pulse instruction
-precompiled in [configuration.py](configuration.py). The above `instruct` finally becomes of a list of integers from 0-49, according to our function `play_sequence` in [run_two_qubit_rb_CR_CNOT.py](run_two_qubit_rb_CR_CNOT.py).
+Unfortunately, as per the authors' experience, such a sequence format as input (i.e. list of tuples), for longer random sequences of sufficient depth from which randomised benchmark metrics could be extracted, is still too complicated to compile. Any QUA program would require only simple integers as input. To do this, the function `instruct_to_integer(instruct)` was written. It translates this list of tuples into a list of integers, each of which describes a concrete pulse instruction
+from [configuration.py](configuration.py). As such, the `instruct` variables is translated to a list of integers between 0-49, according to the function `play_sequence` in [run_two_qubit_rb_CR_CNOT.py](run_two_qubit_rb_CR_CNOT.py).
 
 **Example**:
 
-The above `instruct` is translated into `instruct_integers`:
+The variable `instruct` is translated into a variable `instruct_integers`:
 
 `[17, 28, 7, 42, 49, 18, 36, 29, 4, 49, 28, 7]`
 
-As you can see, the first moment `('x180', '0'),
-('-x90', '1')` corresponds to the integer instruction `17`.
+Here, the first moment `('x180', '0'), ('-x90', '1')` corresponds to the integer instruction `17`.
 
-### 3.2 Play multiple random sequences with different depths
+### 3.2 Playing multiple random sequences with different depths
 
 #### 3.2.1 Stacking all `instruct_integers` into `sequence_list`
-It appears that we cannot let qm loop over an numpy array. However, we have one `instruct_integers` for each randomization and for each different depth. The preferable way is to use a single list to store all `instruct_integers` from different randomizations and for different `depth`'s. This is done by the function `pre_generate_sequence`.
+The end user needs to loop over many different sequences of many different depths on the hardware itself rather than in software. However, one has a single `instruct_integers` variable for each random sequence and for each different depth. The function `pre_generate_sequence` is used to create a single list to store all `instruct_integers` from different randomizations and for different sequence depth's. 
 
-It is important to also store the length of each individual `instruct_integers` to inform our qm program where to start and to stop for each iteration when referencing `sequence_list`. That information is stored in `len_list`. 
+Furthermore, it is important to also store the length of each individual `instruct_integers` variable, as the QUA program needs to know where to start and to stop for each iteration when reading `sequence_list`. That information is stored in `len_list`. 
 
 ### 3.2.2 Finally, `play_sequence` in loops.
 
-Every time we use this function inside a qm program, we provide it with the full list `sequence_list`, but also let it know where to `start` and the `length` it run over in each iteration.
+Every time this function is used inside a QUA program, it is provided with the full list `sequence_list`. The QUA program is also fed information instructing it where to `start` playing pulses, and the `length` of instructions the program needs to cycle over in each iteration.
